@@ -1,0 +1,75 @@
+cmake_minimum_required(VERSION 3.17)
+project(AnnOSTemp C)
+
+set(CMAKE_C_STANDARD 11)
+
+include_directories(.)
+include_directories(src)
+include_directories(src/kernel)
+include_directories(src/kernel/boot)
+include_directories(src/kernel/interrupt)
+include_directories(src/kernel/lib)
+include_directories(src/kernel/lib/console)
+include_directories(src/kernel/lib/disk)
+include_directories(src/kernel/lib/memory)
+include_directories(src/kernel/loader)
+include_directories(src/kernel/misc)
+include_directories(src/stdlib)
+include_directories(src/user)
+
+add_executable(AnnOSTemp
+        src/kernel/boot/main.c
+        src/kernel/interrupt/apic.h
+        src/kernel/interrupt/interrupt.c
+        src/kernel/interrupt/interrupt.h
+        src/kernel/interrupt/ioapic.h
+        src/kernel/interrupt/keyboard.c
+        src/kernel/interrupt/keyboard.h
+        src/kernel/interrupt/pic.h
+        src/kernel/interrupt/timer.c
+        src/kernel/interrupt/timer.h
+        src/kernel/lib/console/terminal.c
+        src/kernel/lib/console/terminal.h
+        src/kernel/lib/disk/ata.c
+        src/kernel/lib/disk/ata.h
+        src/kernel/lib/memory/layout.h
+        src/kernel/lib/memory/map.c
+        src/kernel/lib/memory/map.h
+        src/kernel/lib/memory/mmu.h
+        src/kernel/loader/config.h
+        src/kernel/loader/loader.c
+        src/kernel/misc/elf.h
+        src/kernel/misc/gdt.h
+        src/kernel/misc/tss.h
+        src/kernel/misc/util.h
+        src/kernel/asm.h
+        src/kernel/cpu.c
+        src/kernel/cpu.h
+        src/kernel/kernel.c
+        src/kernel/monitor.c
+        src/kernel/monitor.h
+        src/kernel/syscall.c
+        src/kernel/syscall.h
+        src/kernel/task.c
+        src/kernel/task.h
+        src/kernel/thread.c
+        src/kernel/thread.h
+        src/stdlib/assert.h
+        src/stdlib/queue.h
+        src/stdlib/stdlib.c
+        src/stdlib/stdlib.h
+        src/stdlib/string.c
+        src/stdlib/string.h
+        src/stdlib/syscall.h
+        src/user/entry.c
+        src/user/exit.c
+        src/user/fork.c
+        src/user/hello.c
+        src/user/read_kernel.c
+        src/user/read_unmap.c
+        src/user/spin.c
+        src/user/syscall.c
+        src/user/syscall.h
+        src/user/write_kernel.c
+        src/user/write_unmap.c
+        src/user/yield.c)
