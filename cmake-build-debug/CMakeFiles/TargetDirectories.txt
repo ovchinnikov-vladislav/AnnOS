@@ -1,3 +1,0 @@
-/home/ubuntu/design_os/AnnOSTemp/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/ubuntu/design_os/AnnOSTemp/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/home/ubuntu/design_os/AnnOSTemp/cmake-build-debug/CMakeFiles/AnnOSTemp.dir
