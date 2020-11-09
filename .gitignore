@@ -63,3 +63,6 @@ aclocal.m4
 
 # CMake
 cmake-build-debug
+
+# IDEA
+.idea
