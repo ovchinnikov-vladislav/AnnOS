@@ -13,6 +13,8 @@
 #include "kernel/misc/util.h"
 #include "kernel/loader/config.h"
 
+// Дескриптор области памяти (данные записи возвращает BIOS при вызове INT 15h, eax=e820h)
+// записи сразу с адреса 0x7e00, в памяти после первого загрузчика
 struct bios_mmap_entry {
 	uint64_t base_addr;
 	uint64_t addr_len;
@@ -70,6 +72,7 @@ void loader_main(void)
 
 #if LAB >= 2
 	// Next two parameters are prepared by the first loader
+	//terminal_printf("Prepare BIOS MMAP ENTRY\n");
 	struct bios_mmap_entry *mm = (struct bios_mmap_entry *)BOOT_MMAP_ADDR;
 	uint32_t cnt = *((uint32_t *)BOOT_MMAP_ADDR - 1);
 
@@ -101,16 +104,23 @@ void *loader_alloc(uint64_t size, uint32_t align)
 
 	uint8_t *loader_freemem;
 	(void)loader_freemem;
-
 	// LAB 2: Your code here:
 	//	Step 1: round loader_freemem up to be aligned properly
 	//	Step 2: save current value of loader_freemem as allocated chunk
 	//	Step 3: increase free_memory to record allocation
 	//	Step 4: return allocated loader_freemem
 
+	if (size == 0) {
+	    terminal_printf("ERROR: size is 0\n");
+	    return NULL;
+	}
 
+	loader_freemem = free_memory; // начинаем с адреса, с которого начинается свободная область памяти
+	loader_freemem += size;       // добавляем к текущему адресу, количество байт памяти, необходимых для выделения
+	loader_freemem = (uint8_t *) ROUND_UP((uintptr_t) loader_freemem, align);  // выравниваем верхнюю границу выделенной области памяти
+	free_memory = loader_freemem;  // смещаем начальный адрес свободной памяти на верхний адрес выделенной памяти
 
-	return NULL;
+	return loader_freemem;
 }
 
 // LAB2 Instruction:
@@ -125,6 +135,39 @@ void *loader_alloc(uint64_t size, uint32_t align)
 int loader_read_kernel(uint64_t *kernel_entry_point)
 {
 	*kernel_entry_point = 0;
+    struct elf64_header  *elf_header = loader_alloc(sizeof(* elf_header), PAGE_SIZE);
+    terminal_printf("Start kernel reading\n");
+
+    if (disk_io_read_segment((uintptr_t) elf_header, ATA_SECTOR_SIZE, KERNEL_BASE_DISK_SECTOR) != 0) {
+        terminal_printf("ERROR: cannot read elf header\n");
+        return -1;
+    }
+
+    if (elf_header->e_magic != ELF_MAGIC) {
+        terminal_printf("ERROR: invalid elf format, magic mismatch (%u)\n", elf_header->e_magic);
+        return -1;
+    }
+
+    *kernel_entry_point = elf_header->e_entry;
+
+    for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
+        program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
+        // Отображаем виртуальный адрес в физический
+        // Для этого старшие байты виртуального адреса надо отбросить
+        // С помощью 32-битного значения 0xFFFFFFFFULL фиксируем младшие биты (старшие отбрасываем)
+        Elf64_Addr p_pa = program_header->p_va & 0xFFFFFFFFULL;
+
+        uint32_t logical_basic_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
+
+        if (disk_io_read_segment(p_pa, program_header->p_memsz, logical_basic_address) != 0) {
+            terminal_printf("ERROR: cannot read segment (%u)\n", logical_basic_address);
+            return -1;
+        }
+
+        if (PADDR(free_memory) < PADDR(p_pa + program_header->p_memsz)) {
+            free_memory = (uint8_t *) (uintptr_t) (p_pa + program_header->p_memsz);
+        }
+    }
 
 	return 0;
 }
@@ -135,11 +178,24 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
 #define MEMORY_TYPE_FREE 1
 void loader_detect_memory(struct bios_mmap_entry *mm, uint32_t cnt)
 {
+    uint64_t temp;
+
 	(void)mm;
 	(void)cnt;
 
 	max_physical_address = 0;
 	pages_cnt = 0;
+
+	terminal_printf("Start detecting loader memory\n");
+
+	for (uint32_t num_desc = 0; num_desc < cnt; num_desc++) {
+        temp = mm[num_desc].base_addr + mm[num_desc].addr_len;
+	    if (mm[num_desc].type == MEMORY_TYPE_FREE && temp > max_physical_address) {
+            max_physical_address = temp;
+	    }
+	}
+
+	pages_cnt = ROUND_DOWN(max_physical_address, PAGE_SIZE) / PAGE_SIZE;
 
 	terminal_printf("Available memory: %u Kb (%u pages)\n",
 			(uint32_t)(max_physical_address / 1024), (uint32_t)pages_cnt);
