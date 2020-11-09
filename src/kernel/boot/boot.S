@@ -14,6 +14,9 @@ boot_entry:
 
 .code16
 	// first of all: disable interrupts
+	// данная команда в системе команд x86 (сокр. от Clear Interrupt-Enable Flag)
+	// сбрасывает interrupt flag (IF) в регистре EFLAGS
+	// когда данный флаг сброшен, процессор игнорирует все прерывания (кроме NMI) от внешних устройств
 	cli
 
 	// initialize segment registers
@@ -23,33 +26,42 @@ boot_entry:
 	movw %ax, %ss
 
 	// enable a20: wait until 8042 will be ready
-	call wait_8042
+	// расширенная память за границами первого мегабайта недоступна, требуется включить линию A20
+	// для включения линии A20 используем контроллер клавиатуры (PS/2)
+	call wait_8042 // ожидание готовности контроллера
 
 	// tell 8042 that we want to write
+	// команды выдачи в порт 2 контроллера
 	movb $0xd1, %al
 	outb %al, $0x64
 
 	// wait until 8042 will be ready
+	// ожидание готовности контроллера
 	call wait_8042
 
+	// данные для порта 2 контроллера
 	movb $0xdf, %al
 	outb %al, $0x60
 
 	// wait until 8042 process our command
+	// ожидание готовности контроллера
 	call wait_8042
+	// линия A20 включена, переходим к следующему блоку
 	jmp a20_enabled
 
+	// ожидание готовности контроллера PS/2 к приему очередного байта
 	wait_8042:
-		inb $0x64, %al
-		testb $0x2, %al
-		jnz wait_8042
+		inb $0x64, %al // чтение состояния контроллера
+		testb $0x2, %al // входной буфер пуст?
+		jnz wait_8042  // если не пуст, продолжаем
 		ret
+
 
 	a20_enabled:
 
 	// Store memory map into 0x7e00 (0x7c00 + 512)
-	movw $0x7de8, %di // 0x7e00 - 24
-	xorl %ebx, %ebx
+	movw $0x7de8, %di // 0x7e00 - 24 (отнимаем 24, потому что добавляем 24 вначаел detect_high_memory)
+	xorl %ebx, %ebx // вначале ebx содержит нулевое смещение от начала карты памяти
 
 	// before first call `%edx' must contain this magic value
 	movl $0x534d4150, %edx // `SMAP'
@@ -59,9 +71,9 @@ boot_entry:
 		movl $0xe820, %eax
 		movl $24, %ecx
 		addw $24, %di
-		int $0x15
+		int $0x15   // вызов BIOS для обнаружения доступной памяти
 
-		// carry flag is clear in case all is ok
+		// carry flag is clear in case all is ok (cf - функция BIOS отсутствует)
 		jc memory_detected
 
 		// magic value must be inside `%eax' in case success call
@@ -82,13 +94,14 @@ boot_entry:
 	orl  $CR0_PE_ON, %eax
 	movl %eax, %cr0
 
-	lgdt gdtdesc
+	lgdt gdtdesc    // загрузка глобальной таблицы дескприпторов
 	ljmp $PROT_MODE_CSEG, $complete_flush
 
 .code32
 
 complete_flush:
 	// set up protected mode segment registers
+	// установка сегмента (переход от реальных адресов к виртуальным)
 	movw $PROT_MODE_DSEG, %ax
 	movw %ax, %ds
 	movw %ax, %es

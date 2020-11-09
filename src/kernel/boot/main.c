@@ -9,12 +9,14 @@ void bootmain(void)
 	struct elf32_header *elf_header = (struct elf32_header *)KERNEL_LOADER_ADDRESS;
 
 	// Start read from sector `1', because sector `0' contains bootloader
+	// Первый загрузчик предполагает, что сразу со второго сектора (1) находится второй загрузчика
 	if (disk_io_read_segment((uint32_t)elf_header, ATA_SECTOR_SIZE, 1) != 0)
 		goto error;
 
 	if (elf_header->e_magic != ELF_MAGIC)
 		goto error;
 
+	// Извлекаем из заголовка ELF-файла второго загрузчика информацию о его секциях
 	for (struct elf32_program_header *ph = ELF32_PHEADER_FIRST(elf_header);
 	     ph < ELF32_PHEADER_LAST(elf_header); ph++) {
 		// `+1' because kernel starts in sector `1' (not `0')
