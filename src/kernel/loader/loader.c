@@ -135,21 +135,27 @@ void *loader_alloc(uint64_t size, uint32_t align)
 int loader_read_kernel(uint64_t *kernel_entry_point)
 {
 	*kernel_entry_point = 0;
+	// выделяем память под elf-заголовок ядра
     struct elf64_header  *elf_header = loader_alloc(sizeof(* elf_header), PAGE_SIZE);
-    terminal_printf("Start kernel reading\n");
+    terminal_printf("\nStart kernel reading\n");
 
+    // читаем заголовок ядра в выделенную область памяти с дискового сектора 2048 (1 Mb) по причине того, что в первых секторах
+    // лежит первый и второй загрузчики
     if (disk_io_read_segment((uintptr_t) elf_header, ATA_SECTOR_SIZE, KERNEL_BASE_DISK_SECTOR) != 0) {
         terminal_printf("ERROR: cannot read elf header\n");
         return -1;
     }
 
+    // проверяем магическое число ELF_MAGIC
     if (elf_header->e_magic != ELF_MAGIC) {
         terminal_printf("ERROR: invalid elf format, magic mismatch (%u)\n", elf_header->e_magic);
         return -1;
     }
 
+    // устанавливаем адрес точки входа в ядро
     *kernel_entry_point = elf_header->e_entry;
 
+    // Считываем заголовки из elf-файла
     for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
         program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
         // Отображаем виртуальный адрес в физический
@@ -157,13 +163,16 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
         // С помощью 32-битного значения 0xFFFFFFFFULL фиксируем младшие биты (старшие отбрасываем)
         Elf64_Addr p_pa = program_header->p_va & 0xFFFFFFFFULL;
 
+        // получаем логический базовый адрес, + KERNEL_BASE_DISK_SECTOR по причине считывания с сектора ядра
         uint32_t logical_basic_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
 
+        // проверяем корректность логического базового адреса и корректность считывания
         if (disk_io_read_segment(p_pa, program_header->p_memsz, logical_basic_address) != 0) {
             terminal_printf("ERROR: cannot read segment (%u)\n", logical_basic_address);
             return -1;
         }
 
+        // Разобраться с PADDR VADDR и т.п.
         if (PADDR(free_memory) < PADDR(p_pa + program_header->p_memsz)) {
             free_memory = (uint8_t *) (uintptr_t) (p_pa + program_header->p_memsz);
         }
@@ -188,15 +197,21 @@ void loader_detect_memory(struct bios_mmap_entry *mm, uint32_t cnt)
 
 	terminal_printf("Start detecting loader memory\n");
 
+	// Проходим по массиву дескрипторов области памяти
 	for (uint32_t num_desc = 0; num_desc < cnt; num_desc++) {
+	    // считаем базовый адрес + смещение (физический адрес)
         temp = mm[num_desc].base_addr + mm[num_desc].addr_len;
+        // Если дескриптор описывает память как свободную и физический адрес, описываемый дескриптором,
+        // больше максимального физического адреса, то в максимальный физический адрес устанавливаем данный физический
 	    if (mm[num_desc].type == MEMORY_TYPE_FREE && temp > max_physical_address) {
             max_physical_address = temp;
 	    }
 	}
 
+	// выравниваем адрес относительно страницы вниз и делим на размер страницы = получаем количество страниц
 	pages_cnt = ROUND_DOWN(max_physical_address, PAGE_SIZE) / PAGE_SIZE;
 
+	// выводим максимальный объем памяти и количество страниц
 	terminal_printf("Available memory: %u Kb (%u pages)\n",
 			(uint32_t)(max_physical_address / 1024), (uint32_t)pages_cnt);
 }
