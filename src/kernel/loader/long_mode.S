@@ -5,28 +5,34 @@
 .global entry_long_mode_asm
 
 .type entry_long_mode_asm, @function
+
 entry_long_mode_asm:
 	pushl %ebp
 	movl %esp, %ebp
 
 	// Reload cs, to switch from compatible mode into long mode
+	// переходим в длинный режим
 	ljmp $GD_KT, $reload_decriptors
 
 .code64
 reload_decriptors:
+    // устанавливаем сегментные регистры в длинном режиме
 	movw $GD_KD, %bx
 	movw %bx, %ds
 	movw %bx, %es
 	movw %bx, %ss
 
+    // в длинном режиме
 long_mode:
 #if LAB < 3
 	addq $0x1, 0xb8000
 	jmp long_mode
 #endif
 
+    // вход в область выполнения ядра
 enter_kernel:
 	movq 8(%ebp), %rax
 
+    // установка в указатель стека виртуального адреса 0xFFFFFFF800000000
 	movq $KERNEL_STACK_TOP, %rsp
 	jmp *%rax
