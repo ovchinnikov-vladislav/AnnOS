@@ -101,8 +101,6 @@ something_bad:
 // LAB2 Instruction:
 // - use `free_memory' as a pointer to memory, wich may be allocated
 // Функция выделения памяти
-// size - количество байт, которые необходимо выделить
-// align - размер области памяти, относительно которой необходимо выравнивать указатель на адрес выделенной области памяти
 void *loader_alloc(uint64_t size, uint32_t align)
 {
 	(void)size;
@@ -138,8 +136,6 @@ void *loader_alloc(uint64_t size, uint32_t align)
 // -- load kernel into physical addresses instead of virtual (drop >4Gb part of virtual address)
 // -- use loader_alloc
 // функция для загрузки ядра в память
-// ядро на диске находится после первого мегабайта (размер одного сектора 512 байт)
-// номер сектора, с которого начинается ядро, равен 1024 * 1024 / 512 = 2048
 #define KERNEL_BASE_DISK_SECTOR 2048 // 1Mb
 int loader_read_kernel(uint64_t *kernel_entry_point)
 {
@@ -148,8 +144,7 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
     struct elf64_header  *elf_header = loader_alloc(sizeof(* elf_header), PAGE_SIZE);
     terminal_printf("\nStart kernel reading\n");
 
-    // читаем заголовок ядра в выделенную область памяти с дискового сектора 2048 (1 Mb)
-    // по причине того, что в первых секторах лежит первый и второй загрузчики
+    // читаем заголовок ядра в выделенную область памяти с дискового сектора 2048 = (1024 * 1024) / 512
     if (disk_io_read_segment((uintptr_t) elf_header, ATA_SECTOR_SIZE, KERNEL_BASE_DISK_SECTOR) != 0) {
         terminal_printf("ERROR: cannot read elf header\n");
         return -1;
@@ -165,28 +160,29 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
     for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
         program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
         // Отображаем виртуальный адрес в физический
-        // Для этого старшие байты виртуального адреса надо отбросить
         // С помощью 32-битного значения 0xFFFFFFFFULL фиксируем младшие биты (старшие отбрасываем)
         // т.е. выполняется правило [KERNBASE; KERNBASE+FREEMEM] -> [0; FREEMEM]
-        Elf64_Addr p_pa = program_header->p_va & 0xFFFFFFFFULL;
+        program_header->p_va &= 0xFFFFFFFFULL;
 
-        // получаем логический базовый адрес, + KERNEL_BASE_DISK_SECTOR по причине считывания с сектора ядра
-        uint32_t logical_basic_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
+        // получаем логический адрес блока, + KERNEL_BASE_DISK_SECTOR по причине считывания с сектора ядра
+        uint32_t logical_block_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
 
-        // проверяем корректность логического базового адреса и корректность считывания
-        if (disk_io_read_segment(p_pa, program_header->p_memsz, logical_basic_address) != 0) {
-            terminal_printf("ERROR: cannot read segment (%u)\n", logical_basic_address);
+        // проверяем корректность логического адреса блока и корректность считывания
+        if (disk_io_read_segment(program_header->p_va, program_header->p_memsz, logical_block_address) != 0) {
+            terminal_printf("ERROR: cannot read segment (%u)\n", logical_block_address);
             return -1;
         }
 
         // PADDR вычисляет физический адрес памяти по виртуальному адресу
-        if (PADDR(free_memory) < PADDR(p_pa + program_header->p_memsz)) {
-            free_memory = (uint8_t *) (uintptr_t) (p_pa + program_header->p_memsz);
+        // После считывания заголовка из elf-файла в память, определяем адрес свободной памяти
+        // путем суммирования текущего виртуального адреса (в данном случае физического) с размером заголовка
+        if (PADDR(free_memory) < PADDR(program_header->p_va + program_header->p_memsz)) {
+            free_memory = (uint8_t *) (uintptr_t) (program_header->p_va + program_header->p_memsz);
         }
     }
 
     // устанавливаем адрес точки входа в ядро (определяем точку входа)
-    *kernel_entry_point = elf_header->e_entry;
+    *kernel_entry_point = elf_header->e_entry; // адрес 0xfffffff8002001d5
 
 	return 0;
 }
@@ -194,7 +190,7 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
 // LAB2 Instruction:
 // - check all entry points with type `free' and detect `max_physical_address'
 // - also detect total `pages_cnt', using `max_physical_address' and `PAGE_SIZE'
-// функция определения количества доступной свободной памяти и количества страниц для данной памяти
+// Функция определения количества доступной свободной памяти и количества страниц для данной памяти
 // BIOS возращает карту памяти полностью не сразу, а несколькими прогонами
 // Каждая запись карты памяти содержит базовый адрес, длина области и тип.
 // Тип - 1 - означает свободная память
@@ -211,9 +207,9 @@ void loader_detect_memory(struct bios_mmap_entry *mm, uint32_t cnt)
 
 	terminal_printf("Start detecting loader memory\n");
 
-	// Проходим по массиву дескрипторов области памяти, данные дескрипторы загружены в память с адреса 0x7e00
+	// Проходим по массиву дескрипторов области памяти, данные дескрипторы загружены в память с адреса 0x7e00, 0x7dfc - размер массива
 	for (uint32_t num_desc = 0; num_desc < cnt; num_desc++) {
-	    // считаем базовый адрес + длина области
+	    // считаем базовый адрес + длина области (получаем последний адрес области памяти)
         temp = mm[num_desc].base_addr + mm[num_desc].addr_len;
         // Если дескриптор описывает память как свободную и физический адрес, описываемый дескриптором,
         // больше максимального физического адреса, то в максимальный физический адрес устанавливаем данный физический
