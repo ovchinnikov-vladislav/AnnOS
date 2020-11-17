@@ -75,7 +75,6 @@ void loader_main(void)
 
 #if LAB >= 2
 	// Next two parameters are prepared by the first loader
-	//terminal_printf("Prepare BIOS MMAP ENTRY\n");
 	struct bios_mmap_entry *mm = (struct bios_mmap_entry *)BOOT_MMAP_ADDR;  // 0x7e00 потому что detect_high_memory
 	uint32_t cnt = *((uint32_t *)BOOT_MMAP_ADDR - 1);                       // 0x7DFC (0x7e00 - 4) потому что грязный хак
 
@@ -103,11 +102,7 @@ something_bad:
 // Функция выделения памяти
 void *loader_alloc(uint64_t size, uint32_t align)
 {
-	(void)size;
-	(void)align;
-
 	uint8_t *loader_freemem;
-	(void)loader_freemem;
 	// LAB 2: Your code here:
 	//	Step 1: round loader_freemem up to be aligned properly
 	//	Step 2: save current value of loader_freemem as allocated chunk
@@ -119,12 +114,11 @@ void *loader_alloc(uint64_t size, uint32_t align)
 	    return NULL;
 	}
 
-	loader_freemem = free_memory; // начинаем с адреса, с которого начинается свободная область памяти
-	loader_freemem += size;       // добавляем к текущему адресу, количество байт памяти, необходимых для выделения
-	loader_freemem = (uint8_t *) ROUND_UP((uintptr_t) loader_freemem, align);  // выравниваем верхнюю границу выделенной области памяти
-	free_memory = loader_freemem;  // смещаем начальный адрес свободной памяти на верхний адрес выделенной памяти
+    // начинаем с адреса, с которого начинается свободная область памяти
+    loader_freemem = (uint8_t *) ROUND_UP((uintptr_t) free_memory, align);
+    free_memory = loader_freemem + size;   // получаем адрес свободной памяти
 
-	return loader_freemem;
+    return loader_freemem;
 }
 
 // LAB2 Instruction:
@@ -135,14 +129,15 @@ void *loader_alloc(uint64_t size, uint32_t align)
 // -- shift `free_memory' if needed to avoid overlaps in future
 // -- load kernel into physical addresses instead of virtual (drop >4Gb part of virtual address)
 // -- use loader_alloc
-// функция для загрузки ядра в память
+// Функция для загрузки ядра в память
 #define KERNEL_BASE_DISK_SECTOR 2048 // 1Mb
+#define KERNEL_BASE_ADDR KERNEL_BASE
 int loader_read_kernel(uint64_t *kernel_entry_point)
 {
 	*kernel_entry_point = 0;
 	// выделяем память под elf-заголовок ядра
     struct elf64_header  *elf_header = loader_alloc(sizeof(* elf_header), PAGE_SIZE);
-    terminal_printf("\nStart kernel reading\n");
+    terminal_printf("Kernel reading...\n");
 
     // читаем заголовок ядра в выделенную область памяти с дискового сектора 2048 = (1024 * 1024) / 512
     if (disk_io_read_segment((uintptr_t) elf_header, ATA_SECTOR_SIZE, KERNEL_BASE_DISK_SECTOR) != 0) {
@@ -156,33 +151,31 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
         return -1;
     }
 
-    // Считываем заголовки из elf-файла
+    // устанавливаем адрес точки входа в ядро (определяем точку входа)
+    *kernel_entry_point = elf_header->e_entry; // адрес 0xfffffff8002001d5
+
+    // Читаем ядро в физические адреса вместо виртуальных
     for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
         program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
         // Отображаем виртуальный адрес в физический
-        // С помощью 32-битного значения 0xFFFFFFFFULL фиксируем младшие биты (старшие отбрасываем)
         // т.е. выполняется правило [KERNBASE; KERNBASE+FREEMEM] -> [0; FREEMEM]
-        program_header->p_va &= 0xFFFFFFFFULL;
+        uint32_t pa = program_header->p_va - KERNEL_BASE_ADDR;
 
         // получаем логический адрес блока, + KERNEL_BASE_DISK_SECTOR по причине считывания с сектора ядра
         uint32_t logical_block_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
 
-        // проверяем корректность логического адреса блока и корректность считывания
-        if (disk_io_read_segment(program_header->p_va, program_header->p_memsz, logical_block_address) != 0) {
+        // считываем сегмент, расположенный по логическому адресу блока, в память по вычисленному физического адресу
+        if (disk_io_read_segment(pa, program_header->p_memsz, logical_block_address) != 0) {
             terminal_printf("ERROR: cannot read segment (%u)\n", logical_block_address);
             return -1;
         }
 
-        // PADDR вычисляет физический адрес памяти по виртуальному адресу
-        // После считывания заголовка из elf-файла в память, определяем адрес свободной памяти
-        // путем суммирования текущего виртуального адреса (в данном случае физического) с размером заголовка
-        if (PADDR(free_memory) < PADDR(program_header->p_va + program_header->p_memsz)) {
-            free_memory = (uint8_t *) (uintptr_t) (program_header->p_va + program_header->p_memsz);
+        // После считывания ядра в память требуется определить новый адрес свободной памяти
+        // путем суммирования текущего  (в данном случае физического) с размером секции
+        if ((uintptr_t) free_memory < pa + program_header->p_memsz) {
+            free_memory = (uint8_t *) (uintptr_t) (pa + program_header->p_memsz);
         }
     }
-
-    // устанавливаем адрес точки входа в ядро (определяем точку входа)
-    *kernel_entry_point = elf_header->e_entry; // адрес 0xfffffff8002001d5
 
 	return 0;
 }
@@ -191,39 +184,28 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
 // - check all entry points with type `free' and detect `max_physical_address'
 // - also detect total `pages_cnt', using `max_physical_address' and `PAGE_SIZE'
 // Функция определения количества доступной свободной памяти и количества страниц для данной памяти
-// BIOS возращает карту памяти полностью не сразу, а несколькими прогонами
-// Каждая запись карты памяти содержит базовый адрес, длина области и тип.
-// Тип - 1 - означает свободная память
 #define MEMORY_TYPE_FREE 1
 void loader_detect_memory(struct bios_mmap_entry *mm, uint32_t cnt)
 {
+    terminal_printf("Loader memory detecting...\n");
     uint64_t temp;
-
-	(void)mm;
-	(void)cnt;
 
 	max_physical_address = 0;
 	pages_cnt = 0;
-
-	terminal_printf("Start detecting loader memory\n");
 
 	// Проходим по массиву дескрипторов области памяти, данные дескрипторы загружены в память с адреса 0x7e00, 0x7dfc - размер массива
 	for (uint32_t num_desc = 0; num_desc < cnt; num_desc++) {
 	    // считаем базовый адрес + длина области (получаем последний адрес области памяти)
         temp = mm[num_desc].base_addr + mm[num_desc].addr_len;
-        // Если дескриптор описывает память как свободную и физический адрес, описываемый дескриптором,
-        // больше максимального физического адреса, то в максимальный физический адрес устанавливаем данный физический
         // область должна быть доступна для использования, ищем максимальный физический адрес
 	    if (mm[num_desc].type == MEMORY_TYPE_FREE && temp > max_physical_address) {
             max_physical_address = temp;
 	    }
 	}
 
-	// выравниваем адрес относительно страницы вниз и делим на размер страницы = получаем количество страниц
-	// выравнивание адреса в данном случае необходимо для точности вычисления
+	// выравниваем по низу, чтобы получить количество страниц, попадающее в объем доступной памяти
 	pages_cnt = ROUND_DOWN(max_physical_address, PAGE_SIZE) / PAGE_SIZE;
 
-	// выводим максимальный объем памяти и количество страниц
 	terminal_printf("Available memory: %u Kb (%u pages)\n",
 			(uint32_t)(max_physical_address / 1024), (uint32_t)pages_cnt);
 }
@@ -235,7 +217,6 @@ int loader_init_memory(struct bios_mmap_entry *mm, uint32_t cnt)
 
 	// Выделение памяти под конфигурацию
 	config = loader_alloc(sizeof(*config), PAGE_SIZE);
-	// обнуление памяти
 	memset(config, 0, sizeof(*config));
 
 	// загрузка новой GDT таблицы (вместо 3-х 5-ь дескрипторов)
@@ -341,6 +322,7 @@ struct descriptor *loader_init_gdt(void)
 	return gdt;
 }
 
+// Функция определения доступности страницы
 bool page_is_available(uint64_t paddr, struct bios_mmap_entry *mm, uint32_t cnt)
 {
 	if (paddr == 0)
@@ -414,11 +396,9 @@ int loader_map_section(uint64_t va, uintptr_t pa, uint64_t len, bool hard)
 void loader_enter_long_mode(uint64_t kernel_entry_point)
 {
 	// Reload gdt
-	// Заменяем текущую GDT на новую
 	asm volatile("lgdt gdtr");
 
 	// Enable PAE
-	// Для перехода в длинный режим также необходимо установить 5 бит в %cr4 в 1
 	asm volatile(
 		"movl %cr4, %eax\n\t"
 		"btsl $5, %eax\n\t"
@@ -426,11 +406,9 @@ void loader_enter_long_mode(uint64_t kernel_entry_point)
 	);
 
 	// Setup CR3
-	// Установка в %cr3 физического адреса на структуру таблицы траниц
 	asm volatile ("movl %%eax, %%cr3" :: "a" (PADDR(pml4)));
 
 	// Enable long mode (set EFER.LME=1)
-	// Установка в регистр EFER бит LME=1 для включения длинного режима
 	asm volatile (
 		"movl $0xc0000080, %ecx\n\t"	// EFER MSR number
 		"rdmsr\n\t"			// Read EFER
@@ -439,7 +417,6 @@ void loader_enter_long_mode(uint64_t kernel_entry_point)
 	);
 
 	// Enable paging to activate long mode
-	// включение страничного преобразования в длинном режиме
 	asm volatile (
 		"movl %cr0, %eax\n\t"
 		"btsl $31, %eax\n\t"
@@ -447,7 +424,7 @@ void loader_enter_long_mode(uint64_t kernel_entry_point)
 	);
 
 	extern void entry_long_mode_asm(uint64_t kernel_entry);
-	// переход в выполнение функции перехода в длинный режим (код в ассемблере)
+	// переход в выполнение функции перехода в длинный режим (код в ассемблере - long_mode.S)
 	entry_long_mode_asm(kernel_entry_point); // does not return
 }
 

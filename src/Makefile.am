@@ -13,7 +13,7 @@ ${IMAGE}: all
 	dd if=$(KERNEL) of=${IMAGE} bs=1M seek=1 conv=notrunc
 
 qemu-gdb: ${IMAGE}
-	$(QEMU) -drive file=$<,index=0,media=disk,format=raw -s -S
+	$(QEMU) -drive file=$<,index=0,media=disk,format=raw -s -S -m 1024M
 
 qemu: ${IMAGE}
 	$(QEMU) -drive file=$<,index=0,media=disk,format=raw -d int,cpu_reset,unimp

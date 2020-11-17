@@ -29,7 +29,6 @@ void kernel_panic(const char *fmt, ...)
 	}
 }
 
-//#if LAB >= 3
 struct page32 {
 	uint32_t ref;
 	uint64_t links;
@@ -49,11 +48,10 @@ void kernel_init_mmap(void)
 
 	// Convert physical addresses from struct config into virtual one
 	// LAB3 code here
+	// Преобразование физических адресов из структуы kernel_config в виртуальные адреса
 	config->pages.ptr = VADDR(config->pages.ptr);
 	config->pml4.ptr = VADDR(config->pml4.ptr);
 	config->gdt.ptr = VADDR(config->gdt.ptr);
-
-    mmap_init(&state);
 
 	//Reinitialize pml4 pointer
 	cpu->pml4 = config->pml4.ptr;
@@ -64,6 +62,7 @@ void kernel_init_mmap(void)
 	state.free = (struct mmap_free_pages){ NULL };
 	// LAB3 code here
     state.pages_cnt = config->pages_cnt;
+    state.pages = config->pages.ptr;
 	mmap_init(&state);
 
 	sgdt(gdtr);
@@ -81,30 +80,30 @@ void kernel_init_mmap(void)
 	for (int64_t i = state.pages_cnt-1; i >= 0; i--) {
 		// LAB3 code here
 
-		// Pages inside free list may has ref counter > 0, this means
-		// that page is used, but reuse is allowed.
-		struct page* p = &state.pages[i];
+		struct page* p = &state.pages[i];       // сейчас это 32-битная страница
 		uint64_t links = pages32[i].links;
 		uint32_t ref_count = pages32[i].ref;
 
-		memset(p, 0, sizeof(*p));
-		p->ref = ref_count;
+        p->ref = ref_count;
 
+        // Pages inside free list may has ref counter > 0, this means
+        // that page is used, but reuse is allowed.
+        // links == 0 - страница используется
 		if (links == 0) {
+            // p->ref == 1 страница используется ядром или оборудованием, генерируем ошибку
 		    assert(p->ref == 1);
 		    used_pages++;
 		} else {
+            memset(p, 0, sizeof(*p));
 		    LIST_INSERT_HEAD(&state.free, p, link);
 		    assert(p->ref <= 1);
 		}
 
-		(void)pages32;
 	}
 
 	terminal_printf("Pages stat: used: `%u', free: `%u'\n",
 			used_pages, state.pages_cnt - used_pages);
 }
-//#endif
 
 #if LAB >= 8
 // Just to demonstrate possible threads implementation
