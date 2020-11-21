@@ -118,109 +118,11 @@ fail:
 	schedule();
 }
 
-// Task 5 from Lab 4
-//____________________________________________________________________
-void div_by_zero_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: div by zero interrupt was not handled\n");
-    task_run(task);
-}
-
-void debug_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: debug interrupt was not handled\n");
-    task_run(task);
-}
-
-void nmi_handler(struct task *task) {
-    (void)task;
-    terminal_printf("WARNING: nmi interrupt was not handled\n");
-    task_run(task);
-}
-
-void breakpoint_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: breakpoint interrupt was not handled\n");
-
-    return schedule();
-}
-
-void overflow_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: overflow interrupt was not handled\n");
-}
-
-void bound_range_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: bound range interrupt was not handled\n");
-}
-
-void invalid_opcode_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: invalid opcode interrupt was not handled\n");
-}
-
-void device_not_available_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: device not available interrupt was not handled\n");
-}
-
-void double_fault_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: double fault interrupt was not handled\n");
-}
-
-void invalid_tss_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: tss interrupt was not handled\n");
-}
-
-void segment_not_present_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: segment not present interrupt was not handled\n");
-}
-
-void stack_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: stack handler interrupt was not handled\n");
-}
-
-void general_protection_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: general protection interrupt was not handled\n");
-}
-
-void x86_fp_instruction_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: x86 fp instruction interrupt was not handled\n");
-}
-
-void alignment_check_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: alignment check interrupt was not handled\n");
-}
-
-void machine_check_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: machine check interrupt was not handled\n");
-}
-
-void simd_fp_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: simd fp interrupt was not handled\n");
-}
-
-void security_exception_handler(struct task *task) {
-    (void) task;
-    terminal_printf("WARNING: security exception interrupt was not handled\n");
-}
-
 // Lab 5. Задание №11
 void syscall_handler(struct task *task) {
     (void) task;
     syscall(task);
 }
-//_______________________________________________________________________
 
 void interrupt_handler(struct task_context ctx)
 {
@@ -241,53 +143,36 @@ void interrupt_handler(struct task_context ctx)
 	switch (ctx.interrupt_number) {
 	    case INTERRUPT_VECTOR_PAGE_FAULT:
 		    return page_fault_handler(cpu->task);
+        case INTERRUPT_VECTOR_BREAKPOINT:
+            return schedule();
+        case INTERRUPT_VECTOR_TIMER:
+            return timer_handler(cpu->task);
+        case INTERRUPT_VECTOR_KEYBOARD:
+            return keyboard_handler(cpu->task);
+        case INTERRUPT_VECTOR_SYSCALL:
+            return syscall_handler(cpu->task);
 	    case INTERRUPT_VECTOR_DIV_BY_ZERO:
-	        return div_by_zero_handler(cpu->task);
         case INTERRUPT_VECTOR_DEBUG:
-            return debug_handler(cpu->task);
 	    case INTERRUPT_VECTOR_NMI:
-	        return nmi_handler(cpu->task);
-	    case INTERRUPT_VECTOR_BREAKPOINT:
-	        return breakpoint_handler(cpu->task);
 	    case INTERRUPT_VECTOR_OVERFLOW:
-	        return overflow_handler(cpu->task);
 	    case INTERRUPT_VECTOR_BOUND_RANGE:
-	        return bound_range_handler(cpu->task);
 	    case INTERRUPT_VECTOR_INVALID_OPCODE:
-	        return invalid_opcode_handler(cpu->task);
 	    case INTERRUPT_VECTOR_DEVICE_NOT_AVAILABLE:
-	        return device_not_available_handler(cpu->task);
 	    case INTERRUPT_VECTOR_DOUBLE_FAULT:
-	        return double_fault_handler(cpu->task);
 	    case INTERRUPT_VECTOR_INVALID_TSS:
-	        return invalid_tss_handler(cpu->task);
 	    case INTERRUPT_VECTOR_SEGMENT_NOT_PRESENT:
-	        return segment_not_present_handler(cpu->task);
 	    case INTERRUPT_VECTOR_STACK:
-	        return stack_handler(cpu->task);
 	    case INTERRUPT_VECTOR_GENERAL_PROTECTION:
-	        return general_protection_handler(cpu->task);
 	    case INTERRUPT_VECTOR_X86_FP_INSTRUCTION:
-	        return x86_fp_instruction_handler(cpu->task);
 	    case INTERRUPT_VECTOR_ALIGNMENT_CHECK:
-	        return alignment_check_handler(cpu->task);
 	    case INTERRUPT_VECTOR_MACHINE_CHECK:
-	        return machine_check_handler(cpu->task);
 	    case INTERRUPT_VECTOR_SIMD_FP:
-	        return simd_fp_handler(cpu->task);
 	    case INTERRUPT_VECTOR_SECURITY_EXCEPTION:
-	        return security_exception_handler(cpu->task);
-//	    case INTERRUPT_VECTOR_TIMER:
-//	        return timer_handler(cpu->task);
-//	    case INTERRUPT_VECTOR_KEYBOARD:
-//	        return keyboard_handler(cpu->task);
-	    case INTERRUPT_VECTOR_SYSCALL:
-	        return syscall_handler(cpu->task);
 	    default:
 		    break;
 	}
 
-	terminal_printf("\nunhandled interrupt: %s (%u)\n",
+	terminal_printf("\nWARNING: unhandled interrupt: %s (%u)\n",
 			interrupt_name[ctx.interrupt_number],
 			(uint32_t)ctx.interrupt_number);
 	terminal_printf("Task dump:\n"
