@@ -142,6 +142,25 @@ void kernel_main(void)
 #if LAB >= 4
 	// Init interrupts and exceptions.
 	interrupt_init();
+	asm volatile("int $0\n");
+	asm volatile("int $1\n");
+	asm volatile("int $2\n");
+//	asm volatile("int $3\n");
+	asm volatile("int $4\n");
+	asm volatile("int $5\n");
+	asm volatile("int $6\n");
+	asm volatile("int $7\n");
+	asm volatile("int $8\n");
+	asm volatile("int $10\n");
+	asm volatile("int $11\n");
+	asm volatile("int $12\n");
+	asm volatile("int $13\n");
+	asm volatile("int $14\n");
+	asm volatile("int $16\n");
+	asm volatile("int $17\n");
+	asm volatile("int $18\n");
+	asm volatile("int $19\n");
+	asm volatile("int $30\n");
 #endif
 
 #if LAB >= 6

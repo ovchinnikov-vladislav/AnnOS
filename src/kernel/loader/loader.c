@@ -152,7 +152,7 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
     }
 
     // устанавливаем адрес точки входа в ядро (определяем точку входа)
-    *kernel_entry_point = elf_header->e_entry; // адрес 0xfffffff8002001d5
+    *kernel_entry_point = elf_header->e_entry;
 
     // Читаем ядро в физические адреса вместо виртуальных
     for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
@@ -346,14 +346,14 @@ bool page_is_available(uint64_t paddr, struct bios_mmap_entry *mm, uint32_t cnt)
 
 	bool page_is_available = true;
 	for (uint32_t i = 0; i < cnt; i++) {
-		if (mm->base_addr > paddr)
+		if (mm[i].base_addr > paddr)
 			continue;
-		if (paddr+PAGE_SIZE >= mm->base_addr+mm->addr_len)
+		if (paddr+PAGE_SIZE >= mm[i].base_addr+mm[i].addr_len)
 			continue;
 
 		// Memory areas from bios may be overlapped, so we must check
 		// all areas, before we can consider that page is free.
-		page_is_available &= mm->type == MEMORY_TYPE_FREE;
+		page_is_available &= mm[i].type == MEMORY_TYPE_FREE;
 	}
 
 	return page_is_available;
