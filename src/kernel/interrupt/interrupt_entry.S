@@ -23,6 +23,7 @@
 
 // LAB4-5 Instruction: create interrupt and exception entry point (use macros above)
 // Задание №7
+// Определение типа прерывания и заполнение общего контекста (task_context) для обработки прерывания
 interrupt_handler_no_error_code(asm_interrupt_div_by_zero_error, INTERRUPT_VECTOR_DIV_BY_ZERO)
 interrupt_handler_no_error_code(asm_interrupt_debug, INTERRUPT_VECTOR_DEBUG)
 interrupt_handler_no_error_code(asm_interrupt_nmi, INTERRUPT_VECTOR_NMI)
@@ -55,6 +56,7 @@ interrupt_handler_no_error_code(asm_interrupt_syscall, INTERRUPT_VECTOR_SYSCALL)
 // -- setup kernel segment registers (only data required)
 // -- call interrupt handler
 // Задание №6
+// Подготовка task_context
 interrupt_handler_common:
     // ds, es, fs, gs в структуре task_context
     pushq $0x0

@@ -119,6 +119,9 @@ fail:
 }
 
 // Задание №5
+// Точки входа для обработчиков прерываний и исключений
+// test_run в некоторых функциях выполняет возврат контекста выполняемой задачи до прерывания
+// многие из обработчиков прерываний (кроме брэйкпоинта, ошибки страницы, системного вызова и таймеров) являются заглушками
 //---------------------------------------------
 void div_by_zero_handler(struct task *task) {
     (void) task;
@@ -138,6 +141,9 @@ void nmi_handler(struct task *task) {
     task_run(task);
 }
 
+// Проверяем, что задача выполняется на уровне пользователя (задача может выполняться на уровне ядра),
+// если эта задача уровня пользователя, то выполняем schedule (обращаемся к планировщику задач),
+// иначе, если эта задача уровня ядра, возвращаем контекст задачи
 void breakpoint_handler(struct task *task) {
     return (task->context.cs & GDT_DPL_U) != 0 ? task_run(task) : schedule();
 }
@@ -228,20 +234,24 @@ void security_exception_handler(struct task *task) {
 //--------------------------------------
 
 // Задание №11. Лабораторная №5
+// Обработчик системного вызова в syscall анализируется контекст задачи для выполнения системного вызова
 void syscall_handler(struct task *task) {
     return syscall(task);
 }
 
+// Функция обработки прерываний, вызывается из ассемблерного кода (interrupt_entry.S)
 void interrupt_handler(struct task_context ctx)
 {
 	struct cpu_context *cpu = cpu_context();
 
+	// Установка текущей задачи (в случае 6 лабораторной работы, устанавливается в task.c (task_init)
 #if LAB >= 4 && LAB <= 5
     cpu->task = &cpu->self_task;
 #endif
 
 	// XXX: Interrups are disabled here, think twice before enable it,
 	// because they can modify `cpu' value (it may cause a lot of problems)
+	// Меняем контекст для определения прерывания, устанавливаем статус задачу в состояние "Готовая к исполнению"
 	cpu->task->context = ctx;
 	cpu->task->state = TASK_STATE_READY;
 
@@ -374,6 +384,7 @@ void interrupt_init(void)
 	// exceptions, wich may occur inside kernel space should use IST,
 	// to force stack switch
     // Задание №9
+    // Иинициализация вектора прерываний, IDT_DPL_S - системный уровень (0), IDT_DPL_U - пользовательский (3)
     idt[INTERRUPT_VECTOR_DIV_BY_ZERO] = INTERRUPT_GATE(GD_KT, asm_interrupt_div_by_zero_error, 0, IDT_DPL_S);
     idt[INTERRUPT_VECTOR_DEBUG] = INTERRUPT_GATE(GD_KT, asm_interrupt_debug, 0, IDT_DPL_S);
     idt[INTERRUPT_VECTOR_NMI] = INTERRUPT_GATE(GD_KT, asm_interrupt_nmi, 0, IDT_DPL_S);
@@ -411,6 +422,7 @@ void interrupt_init(void)
 	// LAB4 Instruction: create and map interrupt stack and exception
 	// stack (use cpu->pml4)
 	// Задание № 10
+	// Выделяем память и маппим ее под стек прерываний
 	for (uintptr_t addr = INTERRUPT_STACK_TOP - INTERRUPT_STACK_SIZE; addr < INTERRUPT_STACK_TOP; addr += PAGE_SIZE) {
 	    struct page *page = page_alloc();
 	    if (page == NULL) {
@@ -421,6 +433,7 @@ void interrupt_init(void)
 	    }
 	}
 
+	// Выделяем память и маппим ее под стек исключений
 	for (uintptr_t addr = EXCEPTION_STACK_TOP - EXCEPTION_STACK_SIZE; addr < EXCEPTION_STACK_TOP; addr += PAGE_SIZE) {
 	    struct page *page = page_alloc();
 	    if (page == NULL) {

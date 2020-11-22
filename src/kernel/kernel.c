@@ -84,7 +84,6 @@ void kernel_init_mmap(void)
 		uint64_t links = pages32[i].links;
 		uint32_t ref_count = pages32[i].ref;
 
-        memset(p, 0, sizeof(*p));
         p->ref = ref_count;
 
         // Pages inside free list may has ref counter > 0, this means
@@ -95,6 +94,7 @@ void kernel_init_mmap(void)
 		    assert(p->ref == 1);
 		    used_pages++;
 		} else {
+            memset(p, 0, sizeof(*p));
 		    LIST_INSERT_HEAD(&state.free, p, link);
 		    assert(p->ref <= 1);
 		}
@@ -144,10 +144,12 @@ void kernel_main(void)
 	interrupt_init();
 #endif
 
+    // Пример для лабораторной работы №4
 #if LAB == 4
     asm volatile("int $0\n");
 #endif
 
+    // Пример для лабораторной работы №5
 #if LAB == 5
     char *ch = "Hello, world\n";
 	asm volatile("movq $0, %%rax\n\t"
