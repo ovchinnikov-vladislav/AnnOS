@@ -159,21 +159,21 @@ int loader_read_kernel(uint64_t *kernel_entry_point)
         program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
         // Отображаем виртуальный адрес в физический
         // т.е. выполняется правило [KERNBASE; KERNBASE+FREEMEM] -> [0; FREEMEM]
-        uint32_t pa = program_header->p_va - KERNEL_BASE_ADDR;
+        program_header->p_va -= KERNEL_BASE_ADDR;
 
         // получаем логический адрес блока, + KERNEL_BASE_DISK_SECTOR по причине считывания с сектора ядра
         uint32_t logical_block_address = (program_header->p_offset / ATA_SECTOR_SIZE) + KERNEL_BASE_DISK_SECTOR;
 
         // считываем сегмент, расположенный по логическому адресу блока, в память по вычисленному физического адресу
-        if (disk_io_read_segment(pa, program_header->p_memsz, logical_block_address) != 0) {
+        if (disk_io_read_segment(program_header->p_va, program_header->p_memsz, logical_block_address) != 0) {
             terminal_printf("ERROR: cannot read segment (%u)\n", logical_block_address);
             return -1;
         }
 
         // После считывания ядра в память требуется определить новый адрес свободной памяти
         // путем суммирования текущего  (в данном случае физического) с размером секции
-        if ((uintptr_t) free_memory < pa + program_header->p_memsz) {
-            free_memory = (uint8_t *) (uintptr_t) (pa + program_header->p_memsz);
+        if (PADDR(free_memory) < PADDR(program_header->p_va + program_header->p_memsz)) {
+            free_memory = (uint8_t *) (uintptr_t) (program_header->p_va + program_header->p_memsz);
         }
     }
 

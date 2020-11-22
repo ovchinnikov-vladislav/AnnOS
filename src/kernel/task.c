@@ -26,6 +26,10 @@ void task_init(void)
 	memset(cpu->task, 0, sizeof(*cpu->task));
 
 	// LAB6 Instruction: initialize tasks list, and mark them as free
+    for (int32_t i = TASK_MAX_CNT - 1; i >= 0; i--) {
+        LIST_INSERT_HEAD(&free_tasks, &tasks[i], free_link);
+        tasks[i].state = TASK_STATE_FREE;
+    }
 }
 
 void task_list(void)
@@ -44,11 +48,26 @@ void task_list(void)
 // LAB6 Instruction:
 // - find and destroy task with id == `task_id' (check `tasks' list)
 // - don't allow destroy kernel thread (check privelege level)
+// Задание №20
 void task_kill(task_id_t task_id)
 {
+    for (int i = 0; i < TASK_MAX_CNT; i++) {
+        if (tasks[i].id == task_id) {
+            if (tasks[i].state == TASK_STATE_RUN || tasks[i].state == TASK_STATE_READY) {
+                if ((tasks[i].context.cs & GDT_DPL_U) == 0) {
+                    terminal_printf("ERROR: killing kernel task\n");
+                    return;
+                }
+
+                task_destroy(&tasks[i]);
+                return;
+            }
+        }
+    }
 	terminal_printf("Can't kill task `%d': no such task\n", task_id);
 }
 
+// Задание №19
 struct task *task_new(const char *name)
 {
 	struct kernel_config *config = (struct kernel_config *)KERNEL_INFO;
@@ -80,7 +99,10 @@ struct task *task_new(const char *name)
 	// - setup `task->pml4'
 	// - clear it
 	// - initialize kernel space part of `task->pml4'
-	(void)kernel_pml4;
+
+	task->pml4 = page2kva(pml4_page);
+	memset(task->pml4, 0, PAGE_SIZE);
+    memcpy(&task->pml4[PML4_IDX(USER_TOP)], &kernel_pml4[PML4_IDX(USER_TOP)], PAGE_SIZE - PML4_IDX(USER_TOP) * sizeof(pml4e_t));
 
 	return task;
 }
@@ -169,22 +191,34 @@ void task_destroy(struct task *task)
 // - allocate space (use `page_insert')
 // - copy `binary + ph->p_offset' into `ph->p_va'
 // - don't forget to initialize bss (diff between `memsz and filesz')
-__attribute__((unused))
+// Задание №18
 static int task_load_segment(struct task *task, const char *name,
 			     uint8_t *binary, struct elf64_program_header *ph)
 {
 	uint64_t va = ROUND_DOWN(ph->p_va, PAGE_SIZE);
 	uint64_t size = ROUND_UP(ph->p_memsz, PAGE_SIZE);
 
-	(void)va;
-	(void)size;
-	(void)name;
-	(void)task;
-	(void)binary;
+    for (uint64_t i = 0; i < size; i += PAGE_SIZE) {
+        struct page *page = page_alloc();
+
+        if (page == NULL) {
+            terminal_printf("ERROR: task %s - no more free pages\n", name);
+            return -1;
+        }
+
+        if (page_insert(task->pml4, page, va + i, PTE_U | PTE_W) != 0) {
+            terminal_printf("ERROR: task %s - page insert failed\n", name);
+            return -1;
+        }
+    }
+
+    memcpy((void *) ph->p_va, binary + ph->p_offset, ph->p_filesz);
+    memset((void *) (ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 
 	return 0;
 }
 
+// Задание №17
 static int task_load(struct task *task, const char *name, uint8_t *binary, size_t size)
 {
 	struct elf64_header *elf_header = (struct elf64_header *)binary;
@@ -197,13 +231,35 @@ static int task_load(struct task *task, const char *name, uint8_t *binary, size_
 	// LAB6 Instruction:
 	// - load all proram headers with type `load' (use `task_load_segment')
 	// - setup task `rip'
-	(void)task;
-	(void)name;
-	(void)size;
+
+	struct kernel_config *config = (struct kernel_config *) KERNEL_INFO;
+
+	lcr3(PADDR(task->pml4));
+    for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
+         program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
+
+        if (program_header->p_type != ELF_PHEADER_TYPE_LOAD)
+            continue;
+
+        if (program_header->p_offset > size) {
+            terminal_printf("ERROR: task %s - truncated binary\n", name);
+            lcr3(PADDR(config->pml4.ptr));
+            return -1;
+        }
+
+        if (task_load_segment(task, name, binary, program_header) != 0) {
+            terminal_printf("ERROR: task %s - load segment\n", name);
+            lcr3(PADDR(config->pml4.ptr));
+            return -1;
+        }
+
+        task_load_segment(task, name, binary, program_header);
+    }
 
 	return 0;
 }
 
+// Задание №16
 int task_create(const char *name, uint8_t *binary, size_t size)
 {
 	struct page *stack;
@@ -218,7 +274,21 @@ int task_create(const char *name, uint8_t *binary, size_t size)
 	// LAB6 Instruction:
 	// - allocate and map stack
 	// - setup segment registers (with proper privelege levels) and stack pointer
-	(void)stack;
+
+    if ((stack = page_alloc()) == NULL) {
+        terminal_printf("ERROR: task %s - not memory for user stack\n", name);
+        goto cleanup;
+    }
+
+    if (page_insert(task->pml4, stack, USER_STACK_TOP - PAGE_SIZE, PTE_U | PTE_W) != 0) {
+        terminal_printf("ERROR: task %s - page_insert failed\n", name);
+    }
+
+    task->context.cs = GD_UT | GDT_DPL_U;
+    task->context.ds = GD_UD | GDT_DPL_U;
+    task->context.es = GD_UD | GDT_DPL_U;
+    task->context.ss = GD_UD | GDT_DPL_U;
+    task->context.rsp = USER_STACK_TOP;
 
 	return 0;
 
@@ -269,18 +339,36 @@ void task_run(struct task *task)
 	);
 }
 
+// Задание №15
 void schedule(void)
 {
 	struct cpu_context *cpu = cpu_context();
-	static int next_task_idx = 0;
+	static uint32_t next_task_idx = 0;
 
 	// LAB6 Instruction: implement scheduler
 	// - check all tasks in state `ready'
 	// - load new `cr3'
 	// - setup `cpu' context
 	// - run new task
-	(void)cpu;
-	(void)next_task_idx;
+
+    for (int i = 0; i < TASK_MAX_CNT; i++) {
+        uint32_t task_id = (next_task_idx + i) % TASK_MAX_CNT;
+
+        if (tasks[task_id].state != TASK_STATE_READY) {
+            assert(tasks[task_id].state != TASK_STATE_RUN);
+            continue;
+        }
+
+        if (rcr3() != PADDR(tasks[task_id].pml4)) {
+            lcr3(PADDR(tasks[task_id].pml4));
+        }
+
+        cpu->task = &tasks[task_id];
+        cpu->pml4 = cpu->task->pml4;
+
+        next_task_idx = task_id + 1;
+        task_run(&tasks[task_id]);
+    }
 
 	panic("no more tasks");
 }

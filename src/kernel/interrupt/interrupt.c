@@ -73,8 +73,8 @@ extern void asm_interrupt_alignment_check();
 extern void asm_interrupt_machine_check();
 extern void asm_interrupt_simd_fp();
 extern void asm_interrupt_security_exception();
-//extern void asm_interrupt_timer();
-//extern void asm_interrupt_keyboard();
+extern void asm_interrupt_timer();
+extern void asm_interrupt_keyboard();
 extern void asm_interrupt_syscall();
 
 // LAB5-6 Instruction:
@@ -118,18 +118,127 @@ fail:
 	schedule();
 }
 
-// Lab 5. Задание №11
-void syscall_handler(struct task *task) {
+// Задание №5
+//---------------------------------------------
+void div_by_zero_handler(struct task *task) {
     (void) task;
-    syscall(task);
+    terminal_printf("WARNING: div by zero interrupt was not handled\n");
+    task_run(task);
+}
+
+void debug_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: debug interrupt was not handled\n");
+    task_run(task);
+}
+
+void nmi_handler(struct task *task) {
+    (void)task;
+    terminal_printf("WARNING: nmi interrupt was not handled\n");
+    task_run(task);
+}
+
+void breakpoint_handler(struct task *task) {
+    return (task->context.cs & GDT_DPL_U) != 0 ? task_run(task) : schedule();
+}
+
+void overflow_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: overflow interrupt was not handled\n");
+    task_run(task);
+}
+
+void bound_range_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: bound range interrupt was not handled\n");
+    task_run(task);
+}
+
+void invalid_opcode_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: invalid opcode interrupt was not handled\n");
+    task_run(task);
+}
+
+void device_not_available_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: device not available interrupt was not handled\n");
+    task_run(task);
+}
+
+void double_fault_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: double fault interrupt was not handled\n");
+    task_run(task);
+}
+
+void invalid_tss_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: tss interrupt was not handled\n");
+    task_run(task);
+}
+
+void segment_not_present_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: segment not present interrupt was not handled\n");
+    task_run(task);
+}
+
+void stack_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: stack handler interrupt was not handled\n");
+    task_run(task);
+}
+
+void general_protection_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: general protection interrupt was not handled\n");
+    task_run(task);
+}
+
+void x86_fp_instruction_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: x86 fp instruction interrupt was not handled\n");
+    task_run(task);
+}
+
+void alignment_check_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: alignment check interrupt was not handled\n");
+    task_run(task);
+}
+
+void machine_check_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: machine check interrupt was not handled\n");
+    task_run(task);
+}
+
+void simd_fp_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: simd fp interrupt was not handled\n");
+    task_run(task);
+}
+
+void security_exception_handler(struct task *task) {
+    (void) task;
+    terminal_printf("WARNING: security exception interrupt was not handled\n");
+    task_run(task);
+}
+//--------------------------------------
+
+// Задание №11. Лабораторная №5
+void syscall_handler(struct task *task) {
+    return syscall(task);
 }
 
 void interrupt_handler(struct task_context ctx)
 {
 	struct cpu_context *cpu = cpu_context();
 
-	// TODO: моя строка
-	cpu->task = &cpu->self_task;
+#if LAB >= 4 && LAB <= 5
+    cpu->task = &cpu->self_task;
+#endif
 
 	// XXX: Interrups are disabled here, think twice before enable it,
 	// because they can modify `cpu' value (it may cause a lot of problems)
@@ -143,31 +252,49 @@ void interrupt_handler(struct task_context ctx)
 	switch (ctx.interrupt_number) {
 	    case INTERRUPT_VECTOR_PAGE_FAULT:
 		    return page_fault_handler(cpu->task);
+        case INTERRUPT_VECTOR_DIV_BY_ZERO:
+            return div_by_zero_handler(cpu->task);
+        case INTERRUPT_VECTOR_DEBUG:
+            return debug_handler(cpu->task);
+        case INTERRUPT_VECTOR_NMI:
+            return nmi_handler(cpu->task);
         case INTERRUPT_VECTOR_BREAKPOINT:
-            return schedule();
+            return breakpoint_handler(cpu->task);
+        case INTERRUPT_VECTOR_OVERFLOW:
+            return overflow_handler(cpu->task);
+        case INTERRUPT_VECTOR_BOUND_RANGE:
+            return bound_range_handler(cpu->task);
+        case INTERRUPT_VECTOR_INVALID_OPCODE:
+            return invalid_opcode_handler(cpu->task);
+        case INTERRUPT_VECTOR_DEVICE_NOT_AVAILABLE:
+            return bound_range_handler(cpu->task);
+        case INTERRUPT_VECTOR_DOUBLE_FAULT:
+            return double_fault_handler(cpu->task);
+        case INTERRUPT_VECTOR_INVALID_TSS:
+            return invalid_tss_handler(cpu->task);
+        case INTERRUPT_VECTOR_SEGMENT_NOT_PRESENT:
+            return segment_not_present_handler(cpu->task);
+        case INTERRUPT_VECTOR_STACK:
+            return stack_handler(cpu->task);
+        case INTERRUPT_VECTOR_GENERAL_PROTECTION:
+            return general_protection_handler(cpu->task);
+        case INTERRUPT_VECTOR_X86_FP_INSTRUCTION:
+            return x86_fp_instruction_handler(cpu->task);
+        case INTERRUPT_VECTOR_ALIGNMENT_CHECK:
+            return alignment_check_handler(cpu->task);
+        case INTERRUPT_VECTOR_MACHINE_CHECK:
+            return machine_check_handler(cpu->task);
+        case INTERRUPT_VECTOR_SIMD_FP:
+            return simd_fp_handler(cpu->task);
+        case INTERRUPT_VECTOR_SECURITY_EXCEPTION:
+            return security_exception_handler(cpu->task);
         case INTERRUPT_VECTOR_TIMER:
             return timer_handler(cpu->task);
         case INTERRUPT_VECTOR_KEYBOARD:
             return keyboard_handler(cpu->task);
         case INTERRUPT_VECTOR_SYSCALL:
+            // Задание №11
             return syscall_handler(cpu->task);
-	    case INTERRUPT_VECTOR_DIV_BY_ZERO:
-        case INTERRUPT_VECTOR_DEBUG:
-	    case INTERRUPT_VECTOR_NMI:
-	    case INTERRUPT_VECTOR_OVERFLOW:
-	    case INTERRUPT_VECTOR_BOUND_RANGE:
-	    case INTERRUPT_VECTOR_INVALID_OPCODE:
-	    case INTERRUPT_VECTOR_DEVICE_NOT_AVAILABLE:
-	    case INTERRUPT_VECTOR_DOUBLE_FAULT:
-	    case INTERRUPT_VECTOR_INVALID_TSS:
-	    case INTERRUPT_VECTOR_SEGMENT_NOT_PRESENT:
-	    case INTERRUPT_VECTOR_STACK:
-	    case INTERRUPT_VECTOR_GENERAL_PROTECTION:
-	    case INTERRUPT_VECTOR_X86_FP_INSTRUCTION:
-	    case INTERRUPT_VECTOR_ALIGNMENT_CHECK:
-	    case INTERRUPT_VECTOR_MACHINE_CHECK:
-	    case INTERRUPT_VECTOR_SIMD_FP:
-	    case INTERRUPT_VECTOR_SECURITY_EXCEPTION:
 	    default:
 		    break;
 	}
@@ -247,26 +374,28 @@ void interrupt_init(void)
 	// exceptions, wich may occur inside kernel space should use IST,
 	// to force stack switch
     // Задание №9
-    idt[INTERRUPT_VECTOR_DIV_BY_ZERO] = INTERRUPT_GATE(GD_KT, asm_interrupt_div_by_zero_error, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_DEBUG] = INTERRUPT_GATE(GD_KT, asm_interrupt_debug, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_NMI] = INTERRUPT_GATE(GD_KT, asm_interrupt_nmi, 1, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_DIV_BY_ZERO] = INTERRUPT_GATE(GD_KT, asm_interrupt_div_by_zero_error, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_DEBUG] = INTERRUPT_GATE(GD_KT, asm_interrupt_debug, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_NMI] = INTERRUPT_GATE(GD_KT, asm_interrupt_nmi, 0, IDT_DPL_S);
     idt[INTERRUPT_VECTOR_BREAKPOINT] = INTERRUPT_GATE(GD_KT, asm_interrupt_breakpoint, 1, IDT_DPL_U);
-    idt[INTERRUPT_VECTOR_OVERFLOW] = INTERRUPT_GATE(GD_KT, asm_interrupt_overflow, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_BOUND_RANGE] = INTERRUPT_GATE(GD_KT, asm_interrupt_bound_range, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_INVALID_OPCODE] = INTERRUPT_GATE(GD_KT, asm_interrupt_invalid_opcode, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_DEVICE_NOT_AVAILABLE] = INTERRUPT_GATE(GD_KT, asm_interrupt_device_not_available, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_DOUBLE_FAULT] = INTERRUPT_GATE(GD_KT, asm_interrupt_double_fault, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_INVALID_TSS] = INTERRUPT_GATE(GD_KT, asm_interrupt_invalid_tss, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_SEGMENT_NOT_PRESENT] = INTERRUPT_GATE(GD_KT, asm_interrupt_segment_not_present, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_STACK] = INTERRUPT_GATE(GD_KT, asm_interrupt_stack, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_GENERAL_PROTECTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_general_protection, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_PAGE_FAULT] = INTERRUPT_GATE(GD_KT, asm_interrupt_page_fault, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_X86_FP_INSTRUCTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_x86_86_fp_instruction, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_ALIGNMENT_CHECK] = INTERRUPT_GATE(GD_KT, asm_interrupt_alignment_check, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_MACHINE_CHECK] = INTERRUPT_GATE(GD_KT, asm_interrupt_machine_check, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_SIMD_FP] = INTERRUPT_GATE(GD_KT, asm_interrupt_simd_fp, 1, IDT_DPL_S);
-    idt[INTERRUPT_VECTOR_SECURITY_EXCEPTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_security_exception, 1, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_OVERFLOW] = INTERRUPT_GATE(GD_KT, asm_interrupt_overflow, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_BOUND_RANGE] = INTERRUPT_GATE(GD_KT, asm_interrupt_bound_range, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_INVALID_OPCODE] = INTERRUPT_GATE(GD_KT, asm_interrupt_invalid_opcode, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_DEVICE_NOT_AVAILABLE] = INTERRUPT_GATE(GD_KT, asm_interrupt_device_not_available, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_DOUBLE_FAULT] = INTERRUPT_GATE(GD_KT, asm_interrupt_double_fault, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_INVALID_TSS] = INTERRUPT_GATE(GD_KT, asm_interrupt_invalid_tss, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_SEGMENT_NOT_PRESENT] = INTERRUPT_GATE(GD_KT, asm_interrupt_segment_not_present, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_STACK] = INTERRUPT_GATE(GD_KT, asm_interrupt_stack, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_GENERAL_PROTECTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_general_protection, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_PAGE_FAULT] = INTERRUPT_GATE(GD_KT, asm_interrupt_page_fault, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_X86_FP_INSTRUCTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_x86_86_fp_instruction, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_ALIGNMENT_CHECK] = INTERRUPT_GATE(GD_KT, asm_interrupt_alignment_check, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_MACHINE_CHECK] = INTERRUPT_GATE(GD_KT, asm_interrupt_machine_check, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_SIMD_FP] = INTERRUPT_GATE(GD_KT, asm_interrupt_simd_fp, 0, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_SECURITY_EXCEPTION] = INTERRUPT_GATE(GD_KT, asm_interrupt_security_exception, 0, IDT_DPL_S);
 
+    idt[INTERRUPT_VECTOR_TIMER] = INTERRUPT_GATE(GD_KT, asm_interrupt_timer, 1, IDT_DPL_S);
+    idt[INTERRUPT_VECTOR_KEYBOARD] = INTERRUPT_GATE(GD_KT, asm_interrupt_keyboard, 1, IDT_DPL_S);
 
     idt[INTERRUPT_VECTOR_SYSCALL] = INTERRUPT_GATE(GD_KT, asm_interrupt_syscall, 1, IDT_DPL_U);
 
@@ -283,16 +412,22 @@ void interrupt_init(void)
 	// stack (use cpu->pml4)
 	// Задание № 10
 	for (uintptr_t addr = INTERRUPT_STACK_TOP - INTERRUPT_STACK_SIZE; addr < INTERRUPT_STACK_TOP; addr += PAGE_SIZE) {
-	    struct page *temp = page_alloc();
-	    if (page_insert(cpu->pml4, temp, addr, PTE_W) != 0) {
-	        assert("ERROR: page allocating for INTERRUPT STACK");
+	    struct page *page = page_alloc();
+	    if (page == NULL) {
+	        panic("ERROR: not enough memory for INTERRUPT STACK");
+	    }
+	    if (page_insert(cpu->pml4, page, addr, PTE_W) != 0) {
+	        panic("ERROR: page allocating for INTERRUPT STACK");
 	    }
 	}
 
 	for (uintptr_t addr = EXCEPTION_STACK_TOP - EXCEPTION_STACK_SIZE; addr < EXCEPTION_STACK_TOP; addr += PAGE_SIZE) {
-	    struct page *temp = page_alloc();
-	    if (page_insert(cpu->pml4, temp, addr, PTE_W) != 0) {
-	        assert("ERROR: page allocating for EXCEPTION STACK");
+	    struct page *page = page_alloc();
+	    if (page == NULL) {
+	        panic("ERROR: not enough memory for EXCEPTION STACK");
+	    }
+	    if (page_insert(cpu->pml4, page, addr, PTE_W) != 0) {
+	        panic("ERROR: page allocating for EXCEPTION STACK");
 	    }
 	}
 

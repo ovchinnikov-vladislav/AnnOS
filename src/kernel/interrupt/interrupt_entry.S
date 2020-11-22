@@ -42,12 +42,12 @@ interrupt_handler_with_error_code(asm_interrupt_page_fault, INTERRUPT_VECTOR_PAG
 interrupt_handler_no_error_code(asm_interrupt_x86_86_fp_instruction, INTERRUPT_VECTOR_X86_FP_INSTRUCTION)
 
 interrupt_handler_with_error_code(asm_interrupt_alignment_check, INTERRUPT_VECTOR_ALIGNMENT_CHECK)
-interrupt_handler_with_error_code(asm_interrupt_machine_check, INTERRUPT_VECTOR_MACHINE_CHECK)
 
+interrupt_handler_no_error_code(asm_interrupt_machine_check, INTERRUPT_VECTOR_MACHINE_CHECK)
 interrupt_handler_no_error_code(asm_interrupt_simd_fp, INTERRUPT_VECTOR_SIMD_FP)
 interrupt_handler_no_error_code(asm_interrupt_security_exception, INTERRUPT_VECTOR_SECURITY_EXCEPTION)
-//interrupt_handler_no_error_code(asm_interrupt_timer, INTERRUPT_VECTOR_TIMER)
-//interrupt_handler_no_error_code(asm_interrupt_keyboard, INTERRUPT_VECTOR_KEYBOARD)
+interrupt_handler_no_error_code(asm_interrupt_timer, INTERRUPT_VECTOR_TIMER)
+interrupt_handler_no_error_code(asm_interrupt_keyboard, INTERRUPT_VECTOR_KEYBOARD)
 interrupt_handler_no_error_code(asm_interrupt_syscall, INTERRUPT_VECTOR_SYSCALL)
 
 // LAB4 instruction:
@@ -81,7 +81,10 @@ interrupt_handler_common:
     pushq %rax
 
     // установка дескриптора сегмента данных ядра
+    pushq %rax
     movw $GD_KD, %ax
     movw %ax, %ds
     movw %ax, %es
+    popq %rax
+
     call interrupt_handler
