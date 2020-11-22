@@ -14,14 +14,17 @@
 // - find page, virtual address `va' belongs to. Use page_lookup
 // - insert it into `dest->pml4' and `src->pml4' if needed
 // Задание №13
+// Подготовка страницы для форкнутого процесса
+// маппинг страницы к дочерней и родительской задаче
 static int task_share_page(struct task *dest, struct task *src, void *va, unsigned perm)
 {
 	uintptr_t va_addr = (uintptr_t)va;
-	struct page *p = page_lookup(src->pml4, va_addr, NULL);
+	struct page *p = page_lookup(src->pml4, va_addr, NULL); // не NULL - страница ассоциирована с виртуальным адресом
 	assert(p != NULL);
 
+	// Можем ли писать или копировать страницу на запись
 	if ((perm & PTE_W) != 0 || (perm & PTE_COW) != 0) {
-	    perm = (perm | PTE_COW) & ~PTE_W;
+	    perm = (perm | PTE_COW) & ~PTE_W; // убираем биты на запись, фиксируем биты для копирования на запись
 	    if (page_insert(src->pml4, p, va_addr, perm) != 0) {
 	        return -1;
 	    }
@@ -57,40 +60,45 @@ static int sys_fork(struct task *task)
 	child->context = task->context;
 	child->context.gprs.rax = 0; // return value
 
+	// Цикл для прохода по всем таблица страничного преобразования вниз до таблицы PTE
     for (uintptr_t i = 0; i <= PML4_IDX(USER_TOP); i++) {
-        uintptr_t pdpe_pa = PML4E_ADDR(task->pml4[i]);
+        uintptr_t p_dir_pointer_entry_addr = PML4E_ADDR(task->pml4[i]);
 
-        if ((task->pml4[i] & PML4E_P) == 0)
-            continue;
+        if ((task->pml4[i] & PML4E_P) != 0) {
+            pdpe_t *p_dir_pointer_entry = VADDR(p_dir_pointer_entry_addr);
 
-        pdpe_t *pdpe = VADDR(pdpe_pa);
-        for (uint16_t j = 0; j < NPDP_ENTRIES; j++) {
-            uintptr_t pde_pa = PDPE_ADDR(pdpe[j]);
+            for (uint16_t j = 0; j < NPDP_ENTRIES; j++) {
+                uintptr_t p_dir_entry_addr = PDPE_ADDR(p_dir_pointer_entry[j]);
 
-            if ((pdpe[j] & PDPE_P) == 0)
-                continue;
+                if ((p_dir_pointer_entry[j] & PDPE_P) != 0) {
+                    pde_t *p_dir_entry = VADDR(p_dir_entry_addr);
 
-            pde_t *pde = VADDR(pde_pa);
-            for (uint16_t k = 0; k < NPD_ENTRIES; k++) {
-                uintptr_t pte_pa = PTE_ADDR(pde[k]);
+                    for (uint16_t k = 0; k < NPD_ENTRIES; k++) {
+                        uintptr_t p_tab_entry_addr = PTE_ADDR(p_dir_entry[k]);
 
-                if ((pde[k] & PDE_P) == 0)
-                    continue;
+                        if ((p_dir_entry[k] & PDE_P) != 0) {
+                            pte_t *p_tab_entry = VADDR(p_tab_entry_addr);
 
-                pte_t *pte = VADDR(pte_pa);
-                for (uint16_t l = 0; l < NPT_ENTRIES; l++) {
-                    if ((pte[l] & PTE_P) == 0)
-                        continue;
+                            for (uint16_t l = 0; l < NPT_ENTRIES; l++) {
 
-                    if (task_share_page(child, task, PAGE_ADDR(i, j, k, l, 0), pte[l] & PTE_FLAGS_MASK) != 0) {
-                        task_destroy(child);
-                        return -1;
+                                // task_share_page - определяем задачу дочернего процесса, задачу родительского процесса,
+                                // виртуальный адрес страницы дочернего процесса, и 12 битов, определяющих разрешение
+                                // на чтение и запись, в случае неудачи уничтожаем новый процесс
+                                if ((p_tab_entry[l] & PTE_P) != 0 &&
+                                    task_share_page(child, task, PAGE_ADDR(i, j, k, l, 0),
+                                                    p_tab_entry[l] & PTE_FLAGS_MASK) != 0) {
+                                    task_destroy(child);
+                                    return -1;
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
+    // Переводим задачу в статус готовой к исполнению
     child->state = TASK_STATE_READY;
 	
 	return child->id;
@@ -101,24 +109,27 @@ static int sys_fork(struct task *task)
 // - you can get syscall number from `rax'
 // - return value also should be passed via `rax'
 // Задание №12
+// Обработка системного вызова
 void syscall(struct task *task)
 {
-    uintptr_t rax = task->context.gprs.rax;
+    uint64_t result;
+    uint64_t rax = task->context.gprs.rax; // номер системного прерывания
     switch (rax) {
         case SYSCALL_PUTS:
-            terminal_printf((char *) task->context.gprs.rbx);
+            terminal_printf("Task %s with name %s: %s\n", task->id, task->name, (char *) task->context.gprs.rbx);
             break;
         case SYSCALL_EXIT:
-            terminal_printf("Task by %s with name %s finish", task->id, task->name);
+            terminal_printf("Task %s with name %s finish\n", task->id, task->name);
             task_destroy(task);
-            schedule();
-            break;
+            return schedule();
         case SYSCALL_FORK:
-            sys_fork(task);
+            result = sys_fork(task);
+            task->context.gprs.rax = result;
+            terminal_printf("Task %s forked task %s\n", task->id, result);
             break;
         case SYSCALL_YIELD:
-            schedule();
-            break;
+            terminal_printf("Task %s - yield\n", task->id);
+            return schedule();
         default:
             panic("ERROR: syscall undefined");
     }

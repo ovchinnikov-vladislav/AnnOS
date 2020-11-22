@@ -359,9 +359,7 @@ void schedule(void)
             continue;
         }
 
-        if (rcr3() != PADDR(tasks[task_id].pml4)) {
-            lcr3(PADDR(tasks[task_id].pml4));
-        }
+        lcr3(PADDR(tasks[task_id].pml4));
 
         cpu->task = &tasks[task_id];
         cpu->pml4 = cpu->task->pml4;
