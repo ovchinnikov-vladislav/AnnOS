@@ -161,17 +161,17 @@ void kernel_main(void)
 	// Initialize tasks free list
 	task_init();
 
-	//TASK_STATIC_INITIALIZER(hello);
+	TASK_STATIC_INITIALIZER(hello);
 
-	//TASK_STATIC_INITIALIZER(read_kernel);
-	//TASK_STATIC_INITIALIZER(read_unmap);
-	//TASK_STATIC_INITIALIZER(write_kernel);
-	//TASK_STATIC_INITIALIZER(write_unmap);
+	TASK_STATIC_INITIALIZER(read_kernel);
+	TASK_STATIC_INITIALIZER(read_unmap);
+	TASK_STATIC_INITIALIZER(write_kernel);
+	TASK_STATIC_INITIALIZER(write_unmap);
 
-	//TASK_STATIC_INITIALIZER(yield);
-	//TASK_STATIC_INITIALIZER(fork);
+	TASK_STATIC_INITIALIZER(yield);
+	TASK_STATIC_INITIALIZER(fork);
 	TASK_STATIC_INITIALIZER(spin);
-	//TASK_STATIC_INITIALIZER(exit);
+	TASK_STATIC_INITIALIZER(exit);
 #endif
 
 #if LAB >= 8

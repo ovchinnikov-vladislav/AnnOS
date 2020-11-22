@@ -52,16 +52,14 @@ void task_list(void)
 void task_kill(task_id_t task_id)
 {
     for (int i = 0; i < TASK_MAX_CNT; i++) {
-        if (tasks[i].id == task_id) {
-            if (tasks[i].state == TASK_STATE_RUN || tasks[i].state == TASK_STATE_READY) {
-                if ((tasks[i].context.cs & GDT_DPL_U) == 0) {
-                    terminal_printf("ERROR: killing kernel task\n");
-                    return;
-                }
-
-                task_destroy(&tasks[i]);
+        if (tasks[i].id == task_id && (tasks[i].state == TASK_STATE_RUN || tasks[i].state == TASK_STATE_READY)) {
+            if ((tasks[i].context.cs & GDT_DPL_U) == 0) {
+                terminal_printf("ERROR: killing kernel task\n");
                 return;
             }
+
+            task_destroy(&tasks[i]);
+            return;
         }
     }
 	terminal_printf("Can't kill task `%d': no such task\n", task_id);
@@ -238,23 +236,22 @@ static int task_load(struct task *task, const char *name, uint8_t *binary, size_
     for (struct elf64_program_header *program_header = ELF64_PHEADER_FIRST(elf_header);
          program_header < ELF64_PHEADER_LAST(elf_header); program_header++) {
 
-        if (program_header->p_type != ELF_PHEADER_TYPE_LOAD)
-            continue;
+        if (program_header->p_type == ELF_PHEADER_TYPE_LOAD) {
+            if (program_header->p_offset > size) {
+                terminal_printf("ERROR: task %s - truncated binary\n", name);
+                lcr3(PADDR(config->pml4.ptr));
+                return -1;
+            }
 
-        if (program_header->p_offset > size) {
-            terminal_printf("ERROR: task %s - truncated binary\n", name);
-            lcr3(PADDR(config->pml4.ptr));
-            return -1;
+            if (task_load_segment(task, name, binary, program_header) != 0) {
+                terminal_printf("ERROR: task %s - load segment\n", name);
+                lcr3(PADDR(config->pml4.ptr));
+                return -1;
+            }
         }
-
-        if (task_load_segment(task, name, binary, program_header) != 0) {
-            terminal_printf("ERROR: task %s - load segment\n", name);
-            lcr3(PADDR(config->pml4.ptr));
-            return -1;
-        }
-
-        task_load_segment(task, name, binary, program_header);
     }
+
+    task->context.rip = elf_header->e_entry;
 
 	return 0;
 }
@@ -281,7 +278,8 @@ int task_create(const char *name, uint8_t *binary, size_t size)
     }
 
     if (page_insert(task->pml4, stack, USER_STACK_TOP - PAGE_SIZE, PTE_U | PTE_W) != 0) {
-        terminal_printf("ERROR: task %s - page_insert failed\n", name);
+        terminal_printf("ERROR: task %s - page insert failed\n", name);
+        goto cleanup;
     }
 
     task->context.cs = GD_UT | GDT_DPL_U;
@@ -366,6 +364,8 @@ void schedule(void)
 
         next_task_idx = task_id + 1;
         task_run(&tasks[task_id]);
+
+     //   return;
     }
 
 	panic("no more tasks");
